@@ -5,25 +5,56 @@ import android.os.Bundle;
 
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.SupportMapFragment;
+import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonParser;
 
+import java.io.BufferedReader;
+import java.io.Reader;
+import java.net.URL;
+import java.nio.charset.Charset;
+import java.util.*;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+
+
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.io.IOException;
+
+import io.realm.Realm;
 
 public class MapsActivity extends FragmentActivity {
 
     private GoogleMap mMap; // Might be null if Google Play services APK is not available.
-
+    private Realm realm;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_maps);
-        setUpMapIfNeeded();
+        try {
+            setUpMapIfNeeded();
+        } catch (IOException e) {
+            e.printStackTrace();
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        setUpMapIfNeeded();
+        try {
+            setUpMapIfNeeded();
+        } catch (IOException e) {
+            e.printStackTrace();
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
     }
 
     /**
@@ -41,7 +72,7 @@ public class MapsActivity extends FragmentActivity {
      * stopped or paused), {@link #onCreate(Bundle)} may not be called again so we should call this
      * method in {@link #onResume()} to guarantee that it will be called.
      */
-    private void setUpMapIfNeeded() {
+    private void setUpMapIfNeeded() throws IOException, JSONException {
         // Do a null check to confirm that we have not already instantiated the map.
         if (mMap == null) {
             // Try to obtain the map from the SupportMapFragment.
@@ -60,8 +91,97 @@ public class MapsActivity extends FragmentActivity {
      * <p/>
      * This should only be called once and when we are sure that {@link #mMap} is not null.
      */
-    private void setUpMap() {
-        mMap.addMarker(new MarkerOptions().position(new LatLng(0, 0)).title("Marker"));
+
+
+
+
+
+    private List<MapPin> loadFreePinsToList() throws IOException, JSONException  {
+        List<MapPin> items = new ArrayList<MapPin>();
+
+        // In this case we're loading from local assets.
+        // NOTE: could alternatively easily load from network
+        InputStream stream = null;
+        try {
+            stream = new URL("https://raw.githubusercontent.com/gravityshouldbenaut/JSONFiles/master/parkingSpots.json").openStream();
+        } catch (IOException e) {
+            return null;
+        }
+
+        JsonParser parser = new JsonParser();
+        JsonArray jsonArray = parser.parse(new InputStreamReader(stream)).getAsJsonArray();
+
+        // Open a transaction to store items into the realm
+        realm.beginTransaction();
+        for (JsonElement e : jsonArray) {
+            // Create a realm capable object
+            MapPin freePin = realm.createObject(MapPin.class);
+            freePin.createSnip(e.getAsJsonObject().get("Snip").getAsString());
+            freePin.createLat(e.getAsJsonObject().get("Lat").getAsDouble());
+            freePin.createLongi(e.getAsJsonObject().get("Long").getAsDouble());
+            // Minor optimization to keep the new cities in a list
+            // so it doesn't have to be reloaded the first time
+            items.add(freePin);
+        }
+        realm.commitTransaction();
+
+        return items;
     }
+    private List<MapPin> loadPaidPinsToList() throws IOException, JSONException  {
+        List<MapPin> items = new ArrayList<MapPin>();
+
+        // In this case we're loading from local assets.
+        // NOTE: could alternatively easily load from network
+        InputStream stream = null;
+        try {
+            stream = new URL("https://raw.githubusercontent.com/gravityshouldbenaut/JSONFiles/master/paidParkingSpots.json").openStream();
+        } catch (IOException e) {
+            return null;
+        }
+
+        JsonParser parser = new JsonParser();
+        JsonArray jsonArray = parser.parse(new InputStreamReader(stream)).getAsJsonArray();
+
+        // Open a transaction to store items into the realm
+        realm.beginTransaction();
+        for (JsonElement e : jsonArray) {
+            // Create a realm capable object
+            MapPin paidPin = realm.createObject(MapPin.class);
+            paidPin.createSnip(e.getAsJsonObject().get("Snip").getAsString());
+            paidPin.createLat(e.getAsJsonObject().get("Lat").getAsDouble());
+            paidPin.createLongi(e.getAsJsonObject().get("Long").getAsDouble());
+            // Minor optimization to keep the new cities in a list
+            // so it doesn't have to be reloaded the first time
+            items.add(paidPin);
+        }
+        realm.commitTransaction();
+
+        return items;
+    }
+    private void setUpMap() throws IOException, JSONException {
+     List <MapPin> FreePins = this.loadFreePinsToList();
+     for(int x=0; x<FreePins.size(); x++){
+         MapPin xPin = FreePins.get(x);
+         String xSnip = xPin.snip();
+         double xLat = xPin.lat();
+         double xLong = xPin.longi();
+         mMap.addMarker(new MarkerOptions().position(new LatLng(xLat, xLong)).title(xSnip).icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_ORANGE)));
+     }
+    List<MapPin> PaidPins = this.loadPaidPinsToList();
+        for(int x=0; x<PaidPins.size(); x++){
+            MapPin xPin = PaidPins.get(x);
+            String xSnip = xPin.snip();
+            double xLat = xPin.lat();
+            double xLong = xPin.longi();
+            mMap.addMarker(new MarkerOptions().position(new LatLng(xLat, xLong)).title(xSnip).icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN)));
+
+
+        }
+
+
+
+
+    }
+
 
 }
